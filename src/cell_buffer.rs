@@ -6,7 +6,8 @@ use std::ops::Range;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Default)]
 pub(crate) struct BoardCellRepr {
-    r: u8, // 2 pieces in a single cell.
+    r: u8, // 2 pieces in a single 'cell' (as in memory cell,
+           // u8 or byte, not board cell).
            // the first 4 bits of the u8 are for one piece.
            // the last 4 bits of the u8 are for the second piece.
            // if no piece, then the 4 corresponding bits are all 0.
@@ -192,5 +193,102 @@ impl RankCellBuffer {
         &'a self,
     ) -> impl Iterator<Item = (BoardIndex, Option<BoardPiece>)> + 'a {
         self.0.iter_pieces()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::board_position::BoardIndex;
+    use crate::cell_buffer::{BoardCellBuffer, BoardCellRepr, WholeBoardCellBuffer};
+    use crate::piece::BoardPiece;
+
+    #[test]
+    fn get_pieces() {
+        let x = BoardCellRepr::from_pieces(None, None);
+        assert_eq!(x.get_piece0(), None);
+        assert_eq!(x.get_piece1(), None);
+
+        let x = BoardCellRepr::from_pieces(None, Some(BoardPiece::WhitePawn));
+        assert_eq!(x.get_piece0(), None);
+        assert_eq!(x.get_piece1(), Some(BoardPiece::WhitePawn));
+
+        let x = BoardCellRepr::from_pieces(Some(BoardPiece::BlackBishop), Some(BoardPiece::BlackPawn));
+        assert_eq!(x.get_piece0(), Some(BoardPiece::BlackBishop));
+        assert_eq!(x.get_piece1(), Some(BoardPiece::BlackPawn));
+
+        let x = BoardCellRepr::from_pieces(Some(BoardPiece::BlackBishop), None);
+        assert_eq!(x.get_piece0(), Some(BoardPiece::BlackBishop));
+        assert_eq!(x.get_piece1(), None);
+    }
+
+    #[test]
+    fn with_set_piece() {
+        let mut x = BoardCellRepr::from_pieces(None, None);
+        assert_eq!(x.get_piece0(), None);
+        assert_eq!(x.get_piece1(), None);
+
+        x.set_piece0(Some(BoardPiece::WhiteKing));
+        assert_eq!(x.get_piece0(), Some(BoardPiece::WhiteKing));
+        assert_eq!(x.get_piece1(), None);
+
+        x.set_piece1(Some(BoardPiece::BlackPawn));
+        assert_eq!(x.get_piece0(), Some(BoardPiece::WhiteKing));
+        assert_eq!(x.get_piece1(), Some(BoardPiece::BlackPawn));
+
+        x.set_piece0(None);
+        assert_eq!(x.get_piece0(), None);
+        assert_eq!(x.get_piece1(), Some(BoardPiece::BlackPawn));
+
+        x.set_piece1(None);
+        assert_eq!(x.get_piece0(), None);
+        assert_eq!(x.get_piece1(), None);
+    }
+
+    #[test]
+    fn get_and_set_pieces_in_whole_board_buffer() {
+        fn count_pieces(b: &WholeBoardCellBuffer) -> usize {
+            b.iter_pieces().filter(|(_, it)| it.is_some()).count()
+        }
+
+        let mut buffer = WholeBoardCellBuffer::init_empty();
+        assert_eq!(0, count_pieces(&buffer));
+        let bi0 = BoardIndex::new(0).unwrap();
+        let bi1 = BoardIndex::new(1).unwrap();
+        let bi2 = BoardIndex::new(2).unwrap();
+        buffer.set_piece(bi0, Some(BoardPiece::BlackPawn));
+        assert_eq!(1, count_pieces(&buffer));
+        assert_eq!(Some(BoardPiece::BlackPawn), buffer.get_piece(bi0));
+        assert_eq!(None, buffer.get_piece(bi1));
+        assert_eq!(None, buffer.get_piece(bi2));
+        buffer.set_piece(bi1, Some(BoardPiece::BlackQueen));
+        assert_eq!(2, count_pieces(&buffer));
+        assert_eq!(Some(BoardPiece::BlackPawn), buffer.get_piece(bi0));
+        assert_eq!(Some(BoardPiece::BlackQueen), buffer.get_piece(bi1));
+        assert_eq!(None, buffer.get_piece(bi2));
+        buffer.set_piece(bi2, Some(BoardPiece::WhiteKing));
+        assert_eq!(3, count_pieces(&buffer));
+        assert_eq!(Some(BoardPiece::BlackPawn), buffer.get_piece(bi0));
+        assert_eq!(Some(BoardPiece::BlackQueen), buffer.get_piece(bi1));
+        assert_eq!(Some(BoardPiece::WhiteKing), buffer.get_piece(bi2));
+        buffer.set_piece(bi2, Some(BoardPiece::BlackKing));
+        assert_eq!(3, count_pieces(&buffer));
+        assert_eq!(Some(BoardPiece::BlackPawn), buffer.get_piece(bi0));
+        assert_eq!(Some(BoardPiece::BlackQueen), buffer.get_piece(bi1));
+        assert_eq!(Some(BoardPiece::BlackKing), buffer.get_piece(bi2));
+        buffer.set_piece(bi1, None);
+        assert_eq!(2, count_pieces(&buffer));
+        assert_eq!(Some(BoardPiece::BlackPawn), buffer.get_piece(bi0));
+        assert_eq!(None, buffer.get_piece(bi1));
+        assert_eq!(Some(BoardPiece::BlackKing), buffer.get_piece(bi2));
+        buffer.set_piece(bi0, None);
+        assert_eq!(1, count_pieces(&buffer));
+        assert_eq!(None, buffer.get_piece(bi0));
+        assert_eq!(None, buffer.get_piece(bi1));
+        assert_eq!(Some(BoardPiece::BlackKing), buffer.get_piece(bi2));
+        buffer.set_piece(bi2, None);
+        assert_eq!(0, count_pieces(&buffer));
+        assert_eq!(None, buffer.get_piece(bi0));
+        assert_eq!(None, buffer.get_piece(bi1));
+        assert_eq!(None, buffer.get_piece(bi2));
     }
 }
